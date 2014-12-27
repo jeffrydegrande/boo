@@ -36,6 +36,11 @@ typedef struct game_offscreen_buffer
     int bytesPerPixel;
 } game_offscreen_buffer;
 
+struct game_rect
+{
+    int x, y;
+    int w, h;
+};
 
 #ifdef __cplusplus 
 }

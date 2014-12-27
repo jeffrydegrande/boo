@@ -19,8 +19,10 @@ typedef float real32;
 typedef double  real64;
 
 
+
 #include "boo.h"
-void loadTextureFromFile(const char *filename, game_offscreen_buffer *buffer);
+int loadTextureFromFile(const char *filename);
+void RenderSprite(int32 index, const game_rect *clip, const game_rect *target);
 #include "boo.cpp"
 
 #include <stdio.h>
@@ -33,6 +35,7 @@ void loadTextureFromFile(const char *filename, game_offscreen_buffer *buffer);
 #define MAP_ANONYMOUS MAP_ANON
 #endif
 
+
 struct sdl_offscreen_buffer {
     SDL_Texture *texture;
     void *memory;
@@ -41,10 +44,13 @@ struct sdl_offscreen_buffer {
     int pitch;
 };
 
+// TODO: actually do something with startTime or get rid of id
 global_variable int StartTime;
 global_variable sdl_offscreen_buffer GlobalBackbuffer;
 global_variable SDL_Window *Window;
 global_variable SDL_Renderer *Renderer;
+global_variable int textureIndex = 0;
+global_variable SDL_Texture *Textures[10]; // increase when we actually need more
 
 internal void SDLResizeTexture(sdl_offscreen_buffer *buffer, int width, int height) {
     int bytesPerPixel = 4;
@@ -73,17 +79,42 @@ internal void SDLResizeTexture(sdl_offscreen_buffer *buffer, int width, int heig
                           0);
 }
 
+void RenderSprite(int32 index, const game_rect *clip, const game_rect *target)
+{
+    /*
+   SDL_Rect sdlRect;
+   sdlRect.x = clip->x;
+   sdlRect.y = clip->y;
+   sdlRect.w = clip->w;
+   sdlRect.h = clip->h;
+   */
+
+    /*
+   SDL_Rect sdlTarget;
+   sdlTarget.x = target->x;
+   sdlTarget.y = target->y;
+   sdlTarget.w = target->w;
+   sdlTarget.h = target->h;
+   */
+
+   SDL_RenderCopy(Renderer,
+                  Textures[index],
+                  (const SDL_Rect *)clip,
+                  (const SDL_Rect *)target);
+}
 
 internal void
 SDLUpdateWindow(SDL_Window *window, SDL_Renderer *Renderer, sdl_offscreen_buffer *buffer) 
 {
-    SDL_UpdateTexture(buffer->texture, 0, buffer->memory, buffer->pitch);
-    SDL_RenderCopy(Renderer, buffer->texture, 0, 0);
+    // SDL_UpdateTexture(buffer->texture, 0, buffer->memory, buffer->pitch);
+    // SDL_RenderCopy(Renderer, buffer->texture, 0, 0);
     SDL_RenderPresent(Renderer);
 }
 
-void loadTextureFromFile(const char *filename, game_offscreen_buffer *buffer) {
-
+// loads a texture and returns the index. texture will become available in the
+// game state
+int loadTextureFromFile(const char *filename) {
+    int result = -1;
     SDL_Surface *tmp = IMG_Load(filename);
 
     if (tmp) {
@@ -91,9 +122,14 @@ void loadTextureFromFile(const char *filename, game_offscreen_buffer *buffer) {
 		SDL_SetColorKey(tmp, SDL_TRUE, key);
 		SDL_Texture *texture = SDL_CreateTextureFromSurface(Renderer, tmp);
 
+        if (texture) {
+            Textures[textureIndex] = texture;
+            result = textureIndex++;
+        }
+
 		SDL_FreeSurface(tmp);
-		SDL_DestroyTexture(texture);
     }
+    return result;
 }
 
 bool handleEvent(SDL_Event *event) {
@@ -118,26 +154,20 @@ bool handleEvent(SDL_Event *event) {
             switch(event->window.event) {
                 case SDL_WINDOWEVENT_SIZE_CHANGED:
                 {
-                    /*
-                    SDL_Window *window = SDL_GetWindowFromID(event->window.windowID);
-                    SDL_Renderer *renderer = SDL_GetRenderer(window);
-                    */
                     printf("Window size changed (%d, %d)\n", 
                             event->window.data1,
                             event->window.data2);
+
                     SDLResizeTexture(&GlobalBackbuffer, event->window.data1, event->window.data2);
                 } break;
 
                 case SDL_WINDOWEVENT_FOCUS_GAINED:
                 {
-                    printf("window focus gained\n");
                 } break;
 
                 case SDL_WINDOWEVENT_EXPOSED:
                 {
-                    SDL_Window *window = SDL_GetWindowFromID(event->window.windowID);
-                    // SDL_Renderer *renderer = SDL_GetRenderer(window);
-                    SDLUpdateWindow(window, Renderer, &GlobalBackbuffer);
+                    SDLUpdateWindow(Window, Renderer, &GlobalBackbuffer);
                 } break;
             }
         } break;
@@ -146,6 +176,7 @@ bool handleEvent(SDL_Event *event) {
 }
 
 int main( int argc, char **argv) {
+
     SDL_Init(SDL_INIT_VIDEO);
 
     Window = SDL_CreateWindow("Boo The Game",
@@ -164,8 +195,6 @@ int main( int argc, char **argv) {
             int width, height;
             SDL_GetWindowSize(Window, &width, &height);
             SDLResizeTexture(&GlobalBackbuffer, width, height);
-            int XOffset = 0;
-            int YOffset = 0;
             while (running) {
                 SDL_Event event;
                 while (SDL_PollEvent(&event)) {
@@ -181,11 +210,10 @@ int main( int argc, char **argv) {
                 buffer.height = GlobalBackbuffer.height;
                 buffer.pitch = GlobalBackbuffer.pitch;
 
-                GameUpdateAndRender(&buffer, XOffset, YOffset);
-
-                SDLUpdateWindow(Window, Renderer, &GlobalBackbuffer);
-                ++XOffset;
-                YOffset += 2;
+                SDL_RenderClear(Renderer);
+                GameUpdateAndRender(&buffer);
+                //SDLUpdateWindow(Window, Renderer, &GlobalBackbuffer);
+                SDL_RenderPresent(Renderer);
             }
         } else {
             printf( "No Renderer\n");
